@@ -1,0 +1,640 @@
+{% extends "base.html" %}
+
+{% block title %}Marine Debris Detection - AI-Powered Analysis{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <!-- Hero Section -->
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="text-center mb-5">
+                <h1 class="display-4 mb-3">
+                    <i class="fas fa-water text-info me-3"></i>
+                    Marine Debris Detection System
+                </h1>
+                <p class="lead text-muted">
+                    Advanced AI-powered detection of plastic, metal, and fishing waste in marine environments.
+                    Real-time analysis with density heatmaps and comprehensive debris information.
+                </p>
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>YOLO AI Active:</strong> Detecting three classes of marine debris - Plastic, Metal, and Fishing Waste
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Section -->
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="card-title mb-0">
+                        <i class="fas fa-cloud-upload-alt me-2"></i>
+                        Upload Marine Image
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <form id="uploadForm" action="{{ url_for('predict') }}" method="POST" enctype="multipart/form-data">
+                        <div class="mb-4">
+                            <label for="imageInput" class="form-label">
+                                <i class="fas fa-image me-2"></i>Select Image File
+                            </label>
+                            <input type="file" class="form-control form-control-lg" id="imageInput" name="image"
+                                   accept="image/*" required>
+                            <div class="form-text">
+                                Supported formats: JPG, PNG, GIF, BMP. Maximum file size: 10MB
+                            </div>
+                        </div>
+
+                        <!-- Detection Settings -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="confidenceThreshold" class="form-label">
+                                    <i class="fas fa-adjust me-2"></i>Confidence Threshold
+                                </label>
+                                <div class="d-flex align-items-center">
+                                    <input type="range" class="form-range me-3" id="confidenceThreshold" name="confidence"
+                                           min="0.01" max="0.30" step="0.01" value="0.1" style="flex: 1;">
+                                    <div class="badge bg-primary" id="confidenceValue">0.10</div>
+                                </div>
+                                <div class="form-text">
+                                    Lower = more objects detected
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="labelDisplayMode" class="form-label">
+                                    <i class="fas fa-tag me-2"></i>Label Display Mode
+                                </label>
+                                <select class="form-select" id="labelDisplayMode" name="label_mode">
+                                    <option value="class_confidence">Class + Confidence %</option>
+                                    <option value="class_only">Class Name Only</option>
+                                    <option value="confidence_only">Confidence % Only</option>
+                                    <option value="none">No Labels</option>
+                                </select>
+                                <div class="form-text">
+                                    Labels for detection boxes
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Image Preview -->
+                        <div id="imagePreview" class="mb-4 text-center" style="display: none;">
+                            <img id="previewImg" src="" alt="Preview" class="img-fluid rounded shadow"
+                                 style="max-height: 400px;">
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary btn-lg px-5" id="submitBtn">
+                                <i class="fas fa-search me-2"></i>
+                                Detect Marine Debris
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" class="row justify-content-center mt-4" style="display: none;">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h4>Processing Image...</h4>
+                    <p class="text-muted">AI is analyzing the marine image for debris detection.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="row justify-content-center mt-4" style="display: none;">
+        <div class="col-lg-12">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h3 class="card-title mb-0">
+                        <i class="fas fa-check-circle me-2"></i>
+                        Detection Results
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Result Image with Heatmap -->
+                        <div class="col-lg-6">
+                            <h5 class="mb-3">Detection Visualization</h5>
+                            <div class="position-relative" style="display: inline-block;">
+                                <img id="resultImg" src="" alt="Detection Results"
+                                     class="img-fluid rounded shadow" style="max-width: 100%; height: auto;">
+                                <canvas id="heatmapCanvas"
+                                        style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+                            </div>
+
+                            <!-- Heatmap Controls -->
+                            <div class="mt-3">
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="toggleHeatmapBtn" onclick="toggleHeatmap()">
+                                    <i class="fas fa-fire me-2"></i>
+                                    <span id="heatmapBtnText">Show Density Heatmap</span>
+                                </button>
+                                <div id="heatmapLegend" class="mt-2" style="display: none;">
+                                    <small class="text-muted">
+                                        <strong>Density Legend:</strong>
+                                        <span class="ms-2" style="color: cyan;">● Low</span>
+                                        <span class="ms-2" style="color: yellow;">● Medium</span>
+                                        <span class="ms-2" style="color: orange;">● High</span>
+                                        <span class="ms-2" style="color: red;">● Very High</span>
+                                    </small>
+                                </div>
+                                <div id="heatmapStats" class="mt-2" style="display: none;">
+                                    <small class="text-muted">
+                                        <strong>Hotspots:</strong> <span id="hotspotCount">0</span> zones
+                                    </small>
+                                </div>
+                            </div>
+
+                            <!-- Class Color Legend -->
+                            <div class="mt-4 p-3 bg-light rounded">
+                                <h6 class="mb-3">Detection Colors</h6>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="d-flex align-items-center">
+                                        <div style="width: 20px; height: 20px; background-color: #FF00FF; margin-right: 8px; border-radius: 3px;"></div>
+                                        <span><strong>Plastic</strong></span>
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        <div style="width: 20px; height: 20px; background-color: #C7FC00; margin-right: 8px; border-radius: 3px;"></div>
+                                        <span><strong>Metal</strong></span>
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        <div style="width: 20px; height: 20px; background-color: #FE0056; margin-right: 8px; border-radius: 3px;"></div>
+                                        <span><strong>Fishing Waste</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Detection Summary -->
+                        <div class="col-lg-6">
+                            <h5 class="mb-3">Detection Summary</h5>
+
+                            <!-- Summary Cards -->
+                            <div class="row text-center mb-4">
+                                <div class="col-4">
+                                    <div class="card bg-primary text-white">
+                                        <div class="card-body p-3">
+                                            <h3 id="totalCount">0</h3>
+                                            <small>Total Objects</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="card bg-info text-white">
+                                        <div class="card-body p-3">
+                                            <h3 id="avgConfidence">0%</h3>
+                                            <small>Avg Confidence</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="card bg-success text-white">
+                                        <div class="card-body p-3">
+                                            <h3 id="highConfCount">0</h3>
+                                            <small>High Confidence</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Detection Breakdown -->
+                            <div id="detectionBreakdown" class="mb-4">
+                                <!-- Will be populated by JavaScript -->
+                            </div>
+
+                            <!-- Confidence Distribution Chart -->
+                            <div class="mb-3">
+                                <h6>Confidence Distribution</h6>
+                                <div style="position: relative; height: 200px;">
+                                    <canvas id="histogramChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="text-center mt-4">
+                        <button type="button" class="btn btn-outline-primary" onclick="resetForm()">
+                            <i class="fas fa-plus me-2"></i>
+                            Upload Another Image
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="downloadResult()">
+                            <i class="fas fa-download me-2"></i>
+                            Download Result
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Know Your Debris Library Section -->
+    <div class="row mt-5" id="debrisLibrarySection">
+        <div class="col-lg-12">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h3 class="card-title mb-0">
+                        <i class="fas fa-book me-2"></i>
+                        Know Your Debris Library
+                    </h3>
+                    <p class="mb-0 mt-2">Learn about different types of marine debris, their degradation times, and environmental impact</p>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-4">
+                        <!-- Plastic Waste Card -->
+                        <div class="col-md-4">
+                            <div class="card h-100 border-0 shadow-sm" style="border-left: 5px solid #FF00FF !important;">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center mb-3">
+                                        <div class="rounded-circle p-3" style="background-color: rgba(255, 0, 255, 0.1);">
+                                            <i class="fas fa-bottle-water fa-2x" style="color: #FF00FF;"></i>
+                                        </div>
+                                        <h4 class="ms-3 mb-0" style="color: #FF00FF;">Plastic Waste</h4>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-clock me-2"></i>Degradation Time</h6>
+                                        <p class="mb-0"><strong>450-1000 years</strong></p>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-route me-2"></i>Environmental Path</h6>
+                                        <p class="mb-0 small">Ocean surface → Marine food chain → Microplastics in sediment</p>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-info-circle me-2"></i>Description</h6>
+                                        <p class="mb-0 small">Plastic debris is one of the most persistent pollutants in marine environments. It breaks down into microplastics that enter the food chain.</p>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-list me-2"></i>Common Items</h6>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            <span class="badge bg-secondary">Bottles</span>
+                                            <span class="badge bg-secondary">Bags</span>
+                                            <span class="badge bg-secondary">Wrappers</span>
+                                            <span class="badge bg-secondary">Straws</span>
+                                            <span class="badge bg-secondary">Containers</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-warning mb-0 small">
+                                        <strong><i class="fas fa-exclamation-triangle me-2"></i>Impact:</strong>
+                                        Ingestion by marine life, entanglement, toxic chemical leaching
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Metal Waste Card -->
+                        <div class="col-md-4">
+                            <div class="card h-100 border-0 shadow-sm" style="border-left: 5px solid #C7FC00 !important;">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center mb-3">
+                                        <div class="rounded-circle p-3" style="background-color: rgba(199, 252, 0, 0.1);">
+                                            <i class="fas fa-recycle fa-2x" style="color: #C7FC00;"></i>
+                                        </div>
+                                        <h4 class="ms-3 mb-0" style="color: #C7FC00;">Metal Waste</h4>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-clock me-2"></i>Degradation Time</h6>
+                                        <p class="mb-0"><strong>50-200 years</strong></p>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-route me-2"></i>Environmental Path</h6>
+                                        <p class="mb-0 small">Ocean floor → Corrosion → Dissolved metals in water column</p>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-info-circle me-2"></i>Description</h6>
+                                        <p class="mb-0 small">Metal waste corrodes in saltwater, releasing harmful chemicals and heavy metals into the marine ecosystem.</p>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-list me-2"></i>Common Items</h6>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            <span class="badge bg-secondary">Cans</span>
+                                            <span class="badge bg-secondary">Containers</span>
+                                            <span class="badge bg-secondary">Foil</span>
+                                            <span class="badge bg-secondary">Hooks</span>
+                                            <span class="badge bg-secondary">Wire</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-warning mb-0 small">
+                                        <strong><i class="fas fa-exclamation-triangle me-2"></i>Impact:</strong>
+                                        Heavy metal contamination, habitat damage, sharp edges causing injury
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fishing Waste Card -->
+                        <div class="col-md-4">
+                            <div class="card h-100 border-0 shadow-sm" style="border-left: 5px solid #FE0056 !important;">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center mb-3">
+                                        <div class="rounded-circle p-3" style="background-color: rgba(254, 0, 86, 0.1);">
+                                            <i class="fas fa-fish fa-2x" style="color: #FE0056;"></i>
+                                        </div>
+                                        <h4 class="ms-3 mb-0" style="color: #FE0056;">Fishing Waste</h4>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-clock me-2"></i>Degradation Time</h6>
+                                        <p class="mb-0"><strong>600+ years</strong></p>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-route me-2"></i>Environmental Path</h6>
+                                        <p class="mb-0 small">Floating/submerged → Ghost fishing → Seafloor accumulation</p>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-info-circle me-2"></i>Description</h6>
+                                        <p class="mb-0 small">Abandoned fishing gear continues to trap and kill marine life (ghost fishing) for decades. Often made of durable synthetic materials.</p>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h6 class="text-muted mb-2"><i class="fas fa-list me-2"></i>Common Items</h6>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            <span class="badge bg-secondary">Nets</span>
+                                            <span class="badge bg-secondary">Lines</span>
+                                            <span class="badge bg-secondary">Buoys</span>
+                                            <span class="badge bg-secondary">Traps</span>
+                                            <span class="badge bg-secondary">Hooks</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-danger mb-0 small">
+                                        <strong><i class="fas fa-exclamation-triangle me-2"></i>Impact:</strong>
+                                        Ghost fishing, entanglement of marine mammals, habitat destruction
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Additional Info Section -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <h5 class="alert-heading"><i class="fas fa-lightbulb me-2"></i>Did You Know?</h5>
+                                <ul class="mb-0">
+                                    <li>Over 8 million tons of plastic enter the ocean every year</li>
+                                    <li>Ghost fishing gear accounts for 10% of all marine litter</li>
+                                    <li>Microplastics have been found in 100% of marine mammals tested</li>
+                                    <li>Metal waste can leach toxic chemicals like mercury and lead into water</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <div class="row mt-5">
+        <div class="col-lg-12">
+            <h2 class="text-center mb-4">System Capabilities</h2>
+            <div class="row">
+                <div class="col-md-3 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body text-center">
+                            <i class="fas fa-brain fa-3x text-primary mb-3"></i>
+                            <h5>YOLO AI Detection</h5>
+                            <p class="text-muted small">
+                                Advanced neural network trained for marine debris classification.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body text-center">
+                            <i class="fas fa-fire fa-3x text-danger mb-3"></i>
+                            <h5>Density Heatmap</h5>
+                            <p class="text-muted small">
+                                Real-time visualization of debris concentration zones.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body text-center">
+                            <i class="fas fa-book-open fa-3x text-info mb-3"></i>
+                            <h5>Debris Library</h5>
+                            <p class="text-muted small">
+                                Comprehensive information about each debris type and impact.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body text-center">
+                            <i class="fas fa-chart-bar fa-3x text-success mb-3"></i>
+                            <h5>Analytics</h5>
+                            <p class="text-muted small">
+                                Detailed statistics and confidence analysis for each detection.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="{{ url_for('static', filename='js/heatmap.js') }}"></script>
+<script>
+// Global variables
+let heatmapInstance = null;
+let currentDetections = [];
+
+// Additional JavaScript for enhanced functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('uploadForm');
+    const imageInput = document.getElementById('imageInput');
+    const imagePreview = document.getElementById('imagePreview');
+    const previewImg = document.getElementById('previewImg');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const resultsSection = document.getElementById('resultsSection');
+    const submitBtn = document.getElementById('submitBtn');
+    const resultImg = document.getElementById('resultImg');
+
+    // Handle confidence threshold slider
+    const confidenceSlider = document.getElementById('confidenceThreshold');
+    const confidenceValue = document.getElementById('confidenceValue');
+
+    confidenceSlider.addEventListener('input', function(e) {
+        confidenceValue.textContent = parseFloat(e.target.value).toFixed(2);
+    });
+
+    // Handle image preview
+    imageInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImg.src = e.target.result;
+                imagePreview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        } else {
+            imagePreview.style.display = 'none';
+        }
+    });
+
+    // Handle form submission
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const formData = new FormData(form);
+
+        // Show loading indicator
+        loadingIndicator.style.display = 'block';
+        resultsSection.style.display = 'none';
+        submitBtn.disabled = true;
+
+        // First submit to get image
+        fetch(form.action, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.blob();
+            }
+            throw new Error('Network response was not ok');
+        })
+        .then(blob => {
+            // Create URL for the result image
+            const imageUrl = URL.createObjectURL(blob);
+            resultImg.src = imageUrl;
+
+            // Wait for image to load before initializing heatmap
+            resultImg.onload = function() {
+                // Initialize heatmap
+                if (!heatmapInstance) {
+                    heatmapInstance = new DebrisHeatmap('heatmapCanvas', resultImg);
+                }
+            };
+
+            // Now get the detection data with JSON request
+            return fetch(form.action + '?format=json', {
+                method: 'POST',
+                body: formData
+            });
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('Failed to get detection data');
+        })
+        .then(data => {
+            // Store detections globally
+            currentDetections = data.detections || [];
+
+            // Show results section
+            loadingIndicator.style.display = 'none';
+            resultsSection.style.display = 'block';
+
+            // Populate detection statistics
+            populateDetectionStats(data);
+
+            // Update heatmap with detection data
+            if (heatmapInstance && currentDetections.length > 0) {
+                heatmapInstance.setDetections(currentDetections);
+                // Don't show heatmap by default
+                heatmapInstance.hide();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            loadingIndicator.style.display = 'none';
+            alert('An error occurred while processing the image. Please try again.');
+        })
+        .finally(() => {
+            submitBtn.disabled = false;
+        });
+    });
+});
+
+function populateDetectionStats(data) {
+    if (data && data.detections && data.detections.length > 0) {
+        const confidences = data.detections.map(d => d.confidence);
+        const totalCount = data.detections.length;
+        const avgConfidence = (confidences.reduce((a, b) => a + b, 0) / confidences.length * 100).toFixed(1);
+        const highConfCount = confidences.filter(c => c > 0.7).length;
+
+        // Count detections by category (normalized names)
+        const categories = {
+            'plastic': 0,
+            'metal': 0,
+            'fishing waste': 0
+        };
+
+        data.detections.forEach(detection => {
+            const className = detection.class_name ? detection.class_name.toLowerCase() : '';
+            if (className in categories) {
+                categories[className]++;
+            }
+        });
+
+        // Update summary cards
+        document.getElementById('totalCount').textContent = totalCount;
+        document.getElementById('avgConfidence').textContent = avgConfidence + '%';
+        document.getElementById('highConfCount').textContent = highConfCount;
+
+        // Create detection breakdown
+        const breakdownDiv = document.getElementById('detectionBreakdown');
+        breakdownDiv.innerHTML = `
+            <div class="card border-0 bg-light">
+                <div class="card-body p-3">
+                    <h6 class="mb-3">Detection Breakdown</h6>
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span><i class="fas fa-circle" style="color: #FF00FF;"></i> Plastic</span>
+                            <strong>${categories['plastic']}</strong>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar" style="width: ${(categories['plastic']/totalCount)*100}%; background-color: #FF00FF;"></div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span><i class="fas fa-circle" style="color: #C7FC00;"></i> Metal</span>
+                            <strong>${categories['metal']}</strong>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar" style="width: ${(categories['metal']/totalCount)*100}%; background-color: #C7FC00;"></div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span><i class="fas fa-circle" style="color: #FE0056;"></i> Fishing Waste</span>
+                            <strong>${categories['fishing waste']}</strong>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar" style="width: ${(categories['fishing waste']/totalCount)*100}%; background-color: #FE0056;"></div>
