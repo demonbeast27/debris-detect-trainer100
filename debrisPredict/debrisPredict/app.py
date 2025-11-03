@@ -4,8 +4,6 @@ import logging
 import tempfile
 import requests
 import base64
-import cv2
-import threading
 from flask import (
     Flask,
     render_template,
@@ -19,28 +17,13 @@ from flask import (
 from flask_cors import CORS
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import numpy as np
-from collections import deque
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "marine-waste-detection-secret-key")
-CORS(
-    app,
-    resources={
-        r"/predict": {"origins": "*"},
-        r"/video_feed": {"origins": "*"},
-        r"/camera": {"origins": "*"},
-    },
-)
-
-# Global camera variables
-camera = None
-camera_lock = threading.Lock()
-camera_active = False
-latest_detections = deque(maxlen=100)  # Store recent detections for heatmap
-heatmap_enabled = False
+CORS(app, resources={r"/predict": {"origins": "*"}})
 
 # Marine waste classes and their subclasses
 MARINE_CLASSES = {
